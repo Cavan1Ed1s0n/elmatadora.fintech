@@ -1,22 +1,123 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Real-Time Stock Stream</title>
+    <title>Real-Time Stock Chart</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body {
+            background-color: #1e1e1e;
+            color: white;
+            font-family: Arial;
+            margin: 0;
+            padding: 20px;
+        }
+        #chart {
+            height: 500px;
+            width: 100%;
+        }
+    </style>
 </head>
 <body>
-    <h1>Real-Time Stock Data</h1>
-    <div id="stock-data"></div>
+    <h1>Real-Time Stock Chart (AAPL)</h1>
+    <div id="chart"></div>
+
     <script>
+        // Initialize chart
+        const chartDiv = document.getElementById('chart');
+        const layout = {
+            title: 'Stock Price Chart with Event Milestones',
+            xaxis: { title: 'Time', type: 'date' },
+            yaxis: { title: 'Price (USD)' },
+            template: 'plotly_dark',
+            plot_bgcolor: '#1e1e1e',
+            paper_bgcolor: '#1e1e1e',
+            font: { family: 'Arial', color: 'white', size: 12 },
+            margin: { l: 40, r: 20, t: 60, b: 40 },
+            hovermode: 'x unified'
+        };
+
+        // Initial data arrays
+        let times = [];
+        let prices = [];
+        let annotations = [];
+        let shapes = [];
+
+        // Initialize Plotly chart
+        Plotly.newPlot(chartDiv, [{
+            x: times,
+            y: prices,
+            mode: 'lines',
+            name: 'Stock Price',
+            line: { color: '#00ffae', width: 2 }
+        }], layout, { shapes: shapes, annotations: annotations });
+
+        // WebSocket connection
         const ws = new WebSocket('wss://ws.finnhub.io?token=cvpukn9r01qi0ef5ltpgcvpukn9r01qi0ef5ltq0');
+        
         ws.onopen = () => {
             ws.send(JSON.stringify({'type': 'subscribe', 'symbol': 'AAPL'}));
         };
+
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.type === 'trade') {
-                const stockDiv = document.getElementById('stock-data');
-                stockDiv.innerHTML += `<p>${data.data[0].s}: $${data.data[0].p} at ${new Date(data.data[0].t).toLocaleTimeString()}</p>`;
+                const trade = data.data[0];
+                const timestamp = new Date(trade.t);
+                const price = trade.p;
+
+                // Add new data point
+                times.push(timestamp);
+                prices.push(price);
+
+                // Keep only last 50 points to prevent overload
+                if (times.length > 50) {
+                    times.shift();
+                    prices.shift();
+                }
+
+                // Occasionally add annotations (example: every 10th point)
+                if (times.length % 10 === 0) {
+                    const annotationY = price + 2;
+                    const minPrice = Math.min(...prices);
+
+                    // Add red dashed line
+                    shapes.push({
+                        type: 'line',
+                        x0: timestamp,
+                        x1: timestamp,
+                        y0: minPrice,
+                        y1: annotationY,
+                        line: { color: 'red', width: 1, dash: 'dot' }
+                    });
+
+                    // Add annotation
+                    annotations.push({
+                        x: timestamp,
+                        y: annotationY,
+                        text: `Event #${Math.floor(times.length/10)}`,
+                        textangle: 0,
+                        font: { color: 'white' },
+                        showarrow: false,
+                        xanchor: 'center',
+                        yanchor: 'bottom',
+                        bgcolor: 'rgba(255,0,0,0.5)'
+                    });
+                }
+
+                // Update chart
+                Plotly.update(chartDiv, {
+                    x: [times],
+                    y: [prices]
+                }, {
+                    shapes: shapes,
+                    annotations: annotations
+                });
             }
+        };
+
+        // Error handling
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
         };
     </script>
 </body>
