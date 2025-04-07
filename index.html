@@ -1,10 +1,23 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>My Blog</title>
+    <title>Real-Time Stock Stream</title>
 </head>
 <body>
-    <h1>Welcome to My Blog</h1>
-    <p>This is a simple blog hosted on GitHub Pages.</p>
+    <h1>Real-Time Stock Data</h1>
+    <div id="stock-data"></div>
+    <script>
+        const ws = new WebSocket('wss://ws.finnhub.io?token=cvpukn9r01qi0ef5ltpgcvpukn9r01qi0ef5ltq0');
+        ws.onopen = () => {
+            ws.send(JSON.stringify({'type': 'subscribe', 'symbol': 'AAPL'}));
+        };
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'trade') {
+                const stockDiv = document.getElementById('stock-data');
+                stockDiv.innerHTML += `<p>${data.data[0].s}: $${data.data[0].p} at ${new Date(data.data[0].t).toLocaleTimeString()}</p>`;
+            }
+        };
+    </script>
 </body>
 </html>
