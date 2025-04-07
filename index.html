@@ -1,124 +1,111 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Real-Time Stock Chart</title>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    <style>
-        body {
-            background-color: #1e1e1e;
-            color: white;
-            font-family: Arial;
-            margin: 0;
-            padding: 20px;
-        }
-        #chart {
-            height: 500px;
-            width: 100%;
-        }
-    </style>
+  <title>Real-Time Stock Chart with Annotations</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    body { background-color: #1e1e1e; color: white; font-family: Arial; }
+    #chart { width: 100%; height: 500px; }
+  </style>
 </head>
 <body>
-    <h1>Real-Time Stock Chart (AAPL)</h1>
-    <div id="chart"></div>
+  <h1>Real-Time AAPL Stock Chart</h1>
+  <div id="chart"></div>
 
-    <script>
-        // Initialize chart
-        const chartDiv = document.getElementById('chart');
-        const layout = {
-            title: 'Stock Price Chart with Event Milestones',
-            xaxis: { title: 'Time', type: 'date' },
-            yaxis: { title: 'Price (USD)' },
-            template: 'plotly_dark',
-            plot_bgcolor: '#1e1e1e',
-            paper_bgcolor: '#1e1e1e',
-            font: { family: 'Arial', color: 'white', size: 12 },
-            margin: { l: 40, r: 20, t: 60, b: 40 },
-            hovermode: 'x unified'
-        };
+  <script>
+    // Static event annotations (use actual future dates if possible)
+    const eventAnnotations = [
+      {
+        x: '2023-01-05',
+        y: null, // will be set later
+        text: 'Earnings Report'
+      },
+      {
+        x: '2023-01-20',
+        y: null,
+        text: 'Market Crash'
+      },
+      {
+        x: '2023-01-25',
+        y: null,
+        text: 'Recovery News'
+      }
+    ];
 
-        // Initial data arrays
-        let times = [];
-        let prices = [];
-        let annotations = [];
-        let shapes = [];
+    // Initialize empty trace
+    const trace = {
+      x: [],
+      y: [],
+      mode: 'lines',
+      name: 'AAPL Price',
+      line: { color: '#00ffae', width: 2 }
+    };
 
-        // Initialize Plotly chart
-        Plotly.newPlot(chartDiv, [{
-            x: times,
-            y: prices,
-            mode: 'lines',
-            name: 'Stock Price',
-            line: { color: '#00ffae', width: 2 }
-        }], layout, { shapes: shapes, annotations: annotations });
+    const layout = {
+      title: 'AAPL Stock Price with Annotations',
+      paper_bgcolor: '#1e1e1e',
+      plot_bgcolor: '#1e1e1e',
+      font: { color: 'white' },
+      xaxis: { title: 'Time' },
+      yaxis: { title: 'Price (USD)' },
+      hovermode: 'x unified',
+      shapes: [],
+      annotations: []
+    };
 
-        // WebSocket connection
-        const ws = new WebSocket('wss://ws.finnhub.io?token=cvpukn9r01qi0ef5ltpgcvpukn9r01qi0ef5ltq0');
-        
-        ws.onopen = () => {
-            ws.send(JSON.stringify({'type': 'subscribe', 'symbol': 'AAPL'}));
-        };
+    Plotly.newPlot('chart', [trace], layout);
 
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.type === 'trade') {
-                const trade = data.data[0];
-                const timestamp = new Date(trade.t);
-                const price = trade.p;
+    // WebSocket to Finnhub for real-time data
+    const ws = new WebSocket('wss://ws.finnhub.io?token=YOUR_API_KEY');
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'subscribe', symbol: 'AAPL' }));
+    };
 
-                // Add new data point
-                times.push(timestamp);
-                prices.push(price);
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'trade') {
+        const trade = msg.data[0];
+        const time = new Date(trade.t);
+        const price = trade.p;
 
-                // Keep only last 50 points to prevent overload
-                if (times.length > 50) {
-                    times.shift();
-                    prices.shift();
-                }
+        // Update chart
+        Plotly.extendTraces('chart', {
+          x: [[time]],
+          y: [[price]]
+        }, [0], 300); // keep 300 points max
 
-                // Occasionally add annotations (example: every 10th point)
-                if (times.length % 10 === 0) {
-                    const annotationY = price + 2;
-                    const minPrice = Math.min(...prices);
+        // Update dynamic Y value for annotations
+        eventAnnotations.forEach(event => {
+          if (event.y === null && time.toISOString().startsWith(event.x)) {
+            event.y = price + 2;
 
-                    // Add red dashed line
-                    shapes.push({
-                        type: 'line',
-                        x0: timestamp,
-                        x1: timestamp,
-                        y0: minPrice,
-                        y1: annotationY,
-                        line: { color: 'red', width: 1, dash: 'dot' }
-                    });
+            // Add red dashed line
+            layout.shapes.push({
+              type: 'line',
+              x0: event.x,
+              x1: event.x,
+              y0: price - 10,
+              y1: event.y,
+              line: { color: 'red', width: 1, dash: 'dot' }
+            });
 
-                    // Add annotation
-                    annotations.push({
-                        x: timestamp,
-                        y: annotationY,
-                        text: `Event #${Math.floor(times.length/10)}`,
-                        textangle: 0,
-                        font: { color: 'white' },
-                        showarrow: false,
-                        xanchor: 'center',
-                        yanchor: 'bottom',
-                        bgcolor: 'rgba(255,0,0,0.5)'
-                    });
-                }
+            // Add annotation label
+            layout.annotations.push({
+              x: event.x,
+              y: event.y,
+              text: event.text,
+              xanchor: 'center',
+              yanchor: 'bottom',
+              showarrow: false,
+              bgcolor: 'rgba(255,0,0,0.5)',
+              font: { color: 'white' }
+            });
 
-                // Update chart
-                Plotly.update(chartDiv, {
-                    x: [times],
-                    y: [prices]
-                }, {
-                    shapes: shapes,
-                    annotations: annotations
-                });
-            }
-        };
-
-        // Error handling
-        ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-        };
-    </script>
+            Plotly.relayout('chart', layout);
+          }
+        });
+      }
+    };
+  </script>
 </body>
 </html>
